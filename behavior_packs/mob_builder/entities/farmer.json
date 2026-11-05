@@ -4,7 +4,14 @@
     "description": {
       "identifier": "mob:farmer",
       "is_summonable": true,
-      "is_spawnable": true
+      "is_spawnable": true,
+      "properties": {
+        "mob:sleeping": {
+          "type": "bool",
+          "default": false,
+          "client_sync": true
+        }
+      }
     },
     "component_groups": {
       "mob:to_crops": {
@@ -17,7 +24,12 @@
           "stay_duration": 1.0,
           "speed_multiplier": 1.0,
           "target_selection_method": "random",
-          "target_blocks": ["minecraft:wheat", "minecraft:carrots", "minecraft:potatoes", "minecraft:beetroot"]
+          "target_blocks": [
+            "minecraft:wheat",
+            "minecraft:carrots",
+            "minecraft:potatoes",
+            "minecraft:beetroot"
+          ]
         }
       },
       "mob:to_chest": {
@@ -29,19 +41,67 @@
           "goal_radius": 1.5,
           "speed_multiplier": 1.0,
           "target_selection_method": "nearest",
-          "target_blocks": ["minecraft:chest"]
+          "target_blocks": [
+            "minecraft:chest"
+          ]
+        }
+      },
+      "mob:to_bed": {
+        "minecraft:behavior.move_to_block": {
+          "priority": 3,
+          "tick_interval": 10,
+          "search_range": 12,
+          "search_height": 4,
+          "goal_radius": 1.0,
+          "speed_multiplier": 1.0,
+          "target_selection_method": "nearest",
+          "target_blocks": [
+            "minecraft:bed"
+          ]
+        }
+      },
+      "mob:asleep": {
+        "minecraft:movement": {
+          "value": 0
+        },
+        "minecraft:pushable": {
+          "is_pushable": false,
+          "is_pushable_by_piston": false
+        },
+        "minecraft:collision_box": {
+          "width": 1.0,
+          "height": 0.3
         }
       }
     },
     "components": {
-      "minecraft:type_family": { "family": ["farmer", "mob"] },
-      "minecraft:collision_box": { "width": 0.6, "height": 1.9 },
-      "minecraft:health": { "value": 20, "max": 20 },
+      "minecraft:type_family": {
+        "family": [
+          "farmer",
+          "mob"
+        ]
+      },
+      "minecraft:collision_box": {
+        "width": 0.6,
+        "height": 1.9
+      },
+      "minecraft:health": {
+        "value": 20,
+        "max": 20
+      },
       "minecraft:persistent": {},
       "minecraft:physics": {},
-      "minecraft:pushable": { "is_pushable": true, "is_pushable_by_piston": true },
-      "minecraft:nameable": { "always_show": true, "allow_name_tag_renaming": false },
-      "minecraft:movement": { "value": 0.5 },
+      "minecraft:pushable": {
+        "is_pushable": true,
+        "is_pushable_by_piston": true
+      },
+      "minecraft:nameable": {
+        "always_show": true,
+        "allow_name_tag_renaming": false
+      },
+      "minecraft:movement": {
+        "value": 0.5
+      },
       "minecraft:movement.basic": {},
       "minecraft:jump.static": {},
       "minecraft:can_climb": {},
@@ -55,24 +115,99 @@
         "restriction_radius": 10,
         "restriction_type": "random_movement"
       },
-      "minecraft:behavior.float": { "priority": 0 },
-      "minecraft:behavior.panic": { "priority": 1, "speed_multiplier": 0.6 },
-      "minecraft:behavior.move_towards_home_restriction": { "priority": 4, "speed_multiplier": 0.6 },
-      "minecraft:behavior.random_stroll": { "priority": 6, "speed_multiplier": 0.6 },
-      "minecraft:behavior.look_at_player": { "priority": 7, "look_distance": 8, "probability": 0.05 },
-      "minecraft:behavior.random_look_around": { "priority": 8 }
+      "minecraft:behavior.float": {
+        "priority": 0
+      },
+      "minecraft:behavior.panic": {
+        "priority": 1,
+        "speed_multiplier": 0.6
+      },
+      "minecraft:behavior.move_towards_home_restriction": {
+        "priority": 4,
+        "speed_multiplier": 0.6
+      },
+      "minecraft:behavior.random_stroll": {
+        "priority": 6,
+        "speed_multiplier": 0.6
+      },
+      "minecraft:behavior.look_at_player": {
+        "priority": 7,
+        "look_distance": 8,
+        "probability": 0.05
+      },
+      "minecraft:behavior.random_look_around": {
+        "priority": 8
+      }
     },
     "events": {
       "mob:go_to_crops": {
-        "remove": { "component_groups": ["mob:to_chest"] },
-        "add": { "component_groups": ["mob:to_crops"] }
+        "remove": {
+          "component_groups": [
+            "mob:to_chest",
+            "mob:to_bed"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "mob:to_crops"
+          ]
+        }
       },
       "mob:go_to_chest": {
-        "remove": { "component_groups": ["mob:to_crops"] },
-        "add": { "component_groups": ["mob:to_chest"] }
+        "remove": {
+          "component_groups": [
+            "mob:to_crops",
+            "mob:to_bed"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "mob:to_chest"
+          ]
+        }
       },
       "mob:stop_moving": {
-        "remove": { "component_groups": ["mob:to_crops", "mob:to_chest"] }
+        "remove": {
+          "component_groups": [
+            "mob:to_crops",
+            "mob:to_chest",
+            "mob:to_bed"
+          ]
+        }
+      },
+      "mob:go_to_bed": {
+        "remove": {
+          "component_groups": [
+            "mob:to_crops",
+            "mob:to_chest"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "mob:to_bed"
+          ]
+        }
+      },
+      "mob:fall_asleep": {
+        "remove": {
+          "component_groups": [
+            "mob:to_crops",
+            "mob:to_chest",
+            "mob:to_bed"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "mob:asleep"
+          ]
+        }
+      },
+      "mob:wake_up": {
+        "remove": {
+          "component_groups": [
+            "mob:asleep"
+          ]
+        }
       }
     }
   }

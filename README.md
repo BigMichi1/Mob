@@ -37,27 +37,45 @@ correct block first, the Builder counts that spot as done.
 
 1. Spawn a Farmer with the **Spawn Farmer** egg, or run `/summon mob:farmer`, next to your field.
 2. The Farmer looks for a chest within 4 blocks. If it doesn't find one, it places a new chest next to itself.
-   That chest is its collector chest. It also uses a composter within 4 blocks of the chest, or places one next
-   to the chest.
+   That chest is its **collector chest**.
 3. The Farmer works the farmland **you** made within 8 blocks of the chest. It supports wheat, carrots, potatoes
    and beetroot.
 4. When a crop is fully grown, the Farmer harvests it. The drops come from the block's vanilla loot table
    (`LootTableManager.generateLootFromBlock`). It keeps one seed, carrot or potato from that harvest and
    replants the same crop right away.
 5. When it carries 16 items, or there is nothing left to harvest, it walks to the chest and unloads:
-   - **Vegetables** (wheat, carrots, potatoes, beetroot) go into the chest.
-   - **Leftovers** (surplus seeds and anything else that isn't a vegetable), plus any vegetables that don't fit
-     in a full chest, go into the composter.
-   - When the composter is full, any further items are dropped next to it.
-6. A ready composter is emptied by the Farmer: the bone meal goes into the chest, or is dropped if the chest
-   is full.
+   - **Vegetables** (wheat, carrots, potatoes, beetroot) go into the collector chest.
+   - **Leftovers** (surplus seeds), plus any vegetables that don't fit in a full collector chest, go into the
+     **compost chest**.
+   - Anything else (e.g. poisonous potatoes) goes into the collector chest. Whatever still doesn't fit is
+     dropped on the ground.
+6. When the composter is ready, the Farmer takes the bone meal out and puts it into the collector chest.
 
 Right-click the Farmer to see in chat what it is carrying.
 
-> **Compost chances** are 30% for seeds and 65% for wheat, carrots, potatoes and beetroot. They are recalled
-> from vanilla behaviour and **not verified** against official documentation. Change them in `COMPOST_CHANCE`
-> in `scripts/farmer.ts`. Items without an entry in that table, such as poisonous potatoes, are not composted.
-> They are dropped next to the composter.
+### Compost station
+
+The first time it unloads, the Farmer builds a compost station next to the collector chest:
+
+```
+[compost chest]
+[hopper]  ->  [composter]  [collector chest]
+```
+
+The hopper pulls items out of the compost chest and pushes them into the composter. That is plain vanilla
+behaviour, so the composter fills with the **game's own compost chances**. The script never sets the fill level
+itself. If a part of the station is broken, the Farmer rebuilds it the next time it unloads. The compost chest
+is never placed next to another chest, so it can't merge into a double chest.
+
+### Sleeping
+
+At night (game time 12542–23460, the same window in which players can sleep) the Farmer stops working:
+
+1. It uses a bed within 10 blocks of its chest. If there is none, it places a bed 2–3 blocks from the chest,
+   on solid ground that isn't farmland.
+2. It walks to the bed, lies down on it, and holds still until morning. The lying pose is the vanilla
+   `animation.villager.get_in_bed`, switched on by the `mob:sleeping` entity property.
+3. In the morning it gets up next to the bed and goes back to work.
 
 ## Project layout
 
@@ -65,7 +83,7 @@ Right-click the Farmer to see in chat what it is carrying.
 behavior_packs/mob_builder/
   manifest.json            # depends on @minecraft/server 2.11.0 (stable)
   entities/builder.json    # entity: movement, home radius, "walk to barrel" goal (component group)
-  entities/farmer.json     # entity: "walk to crops" / "walk to chest" goals (component groups)
+  entities/farmer.json     # entity: walk to crops / chest / bed goals, "asleep" group, mob:sleeping property
 resource_packs/mob_builder/
   entity/*.entity.json     # vanilla villager_v2 model; stonemason (Builder) / farmer (Farmer) outfit
   render_controllers/worker.render_controllers.json  # villager skin + profession overlay
@@ -75,7 +93,9 @@ scripts/
   common.ts     # shared helpers: find/place blocks, name tag status, drops
   builder.ts    # Builder AI: link barrel, fetch one block, place it
   blueprint.ts  # the house, drawn as ASCII layers. Edit this to build something else
-  farmer.ts     # Farmer AI: link chest + composter, harvest/replant, unload
+  farmer.ts     # Farmer AI: harvest/replant, unload, day/night routine
+  compost-station.ts  # builds the compost chest -> hopper -> composter station
+  bed.ts        # finds or places the Farmer's bed
 ```
 
 ### How the pieces work together
@@ -83,7 +103,8 @@ scripts/
 - **Movement is data-driven.** The stable Script API has no pathfinding control, so the script switches
   `minecraft:behavior.move_to_block` goals on and off with entity events:
   - The Builder uses `mob:start_fetching` to walk to its barrel.
-  - The Farmer uses `mob:go_to_crops` to walk among the crops, and `mob:go_to_chest` to walk to the chest.
+  - The Farmer uses `mob:go_to_crops`, `mob:go_to_chest` and `mob:go_to_bed`, plus `mob:fall_asleep` and
+    `mob:wake_up` to freeze and unfreeze itself in bed.
   - Otherwise the workers stroll inside their `minecraft:home` radius, which keeps them near their work.
 - **State is saved on the entity.** Linked block positions, build step, carried items and the Farmer's bag are
   stored as entity dynamic properties, so they survive world reloads.
@@ -126,5 +147,10 @@ current Windows release.
 - The Farmer doesn't till soil or plant on empty farmland. It only harvests and replants crops that are
   already growing.
 - If a fully grown wheat or beetroot drops no seed and the Farmer has none in its bag, that spot stays empty.
-- The script fills the composter itself (there is no stable API for a mob to use an item on a block). It also
-  skips the short vanilla delay between "full" and "ready".
+- **Needs checking in game:**
+  - The bed placement assumes the bed `direction` state means 0 = south, 1 = west, 2 = north, 3 = east (the
+    direction the head points from the foot). If beds come out broken or as single halves, adjust
+    `BED_DIRECTIONS` in `scripts/bed.ts`.
+  - Which end of the bed the Farmer's head ends up at depends on how the vanilla sleep animation is
+    oriented. You may need to flip `facingLocation` in `Farmer.fallAsleep`.
+- A placed bed has the default colour (scripts can't set a bed's colour).

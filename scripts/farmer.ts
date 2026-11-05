@@ -11,25 +11,34 @@ import {
 } from "@minecraft/server";
 import { Vector3Utils } from "@minecraft/math";
 import { MinecraftBlockTypes, MinecraftItemTypes } from "@minecraft/vanilla-data";
+import { bedFoot, findBedHead, isBedHead, placeBed, spotNextToBed } from "./bed";
 import { center, dropOn, face, findBlockNear, placeBlockNextTo, prettyName, safeGetBlock, setStatus } from "./common";
+import { buildStation, type CompostStation, isIntact, stationChest } from "./compost-station";
 
 export const FARMER_TYPE = "mob:farmer";
 
 /** Radius around the collector chest that the farmer treats as its field. */
 const FIELD_RADIUS = 8;
+/** Radius around the collector chest in which the farmer looks for a bed. */
+const BED_RADIUS = 10;
 /** How close (blocks) the farmer must be to a crop to harvest it. */
 const HARVEST_REACH = 3;
-/** How close (blocks) the farmer must be to the chest to unload. */
+/** How close (blocks) the farmer must be to the chest to unload, or to its bed to lie down. */
 const CHEST_REACH = 3;
-/** Radius searched for an existing chest / composter when a farmer is first seen. */
+const BED_REACH = 2;
+/** Radius searched for an existing chest when a farmer is first seen. */
 const SEARCH_RADIUS = 4;
 /** Items the farmer carries before it walks back to unload. */
 const BAG_CAPACITY = 16;
 /** Growth state value of a fully grown crop (all four vanilla crops use 0..7). */
 const MATURE_GROWTH = 7;
-/** Composter fill levels: 7 = full, 8 = bone meal ready. */
-const COMPOSTER_FULL = 7;
+/** Composter fill level at which bone meal is ready. */
 const COMPOSTER_READY = 8;
+/** Night as used for player sleeping (ticks of the day, 0..24000). */
+const NIGHT_START = 12542;
+const NIGHT_END = 23460;
+/** Height of a bed's top surface. */
+const BED_HEIGHT = 0.5625;
 
 /** Crop block -> the item that replants it. */
 const CROPS = new Map<string, string>([
@@ -39,7 +48,7 @@ const CROPS = new Map<string, string>([
   [MinecraftBlockTypes.Beetroot, MinecraftItemTypes.BeetrootSeeds],
 ]);
 
-/** The "vegetables" that go into the collector chest. Everything else is a leftover for the composter. */
+/** The "vegetables" that go into the collector chest. */
 const PRODUCE = new Set<string>([
   MinecraftItemTypes.Wheat,
   MinecraftItemTypes.Carrot,
@@ -47,31 +56,25 @@ const PRODUCE = new Set<string>([
   MinecraftItemTypes.Beetroot,
 ]);
 
-/**
- * Chance that one item raises the composter's fill level by one.
- * NOTE: values recalled from vanilla Bedrock behaviour and not verified against official documentation.
- * Items not listed here are not composted but dropped next to the composter.
- */
-const COMPOST_CHANCE = new Map<string, number>([
-  [MinecraftItemTypes.WheatSeeds, 0.3],
-  [MinecraftItemTypes.BeetrootSeeds, 0.3],
-  [MinecraftItemTypes.Wheat, 0.65],
-  [MinecraftItemTypes.Carrot, 0.65],
-  [MinecraftItemTypes.Potato, 0.65],
-  [MinecraftItemTypes.Beetroot, 0.65],
-]);
+/** Leftovers that go into the compost chest (all of them are accepted by a vanilla composter). */
+const COMPOSTABLE = new Set<string>([...PRODUCE, MinecraftItemTypes.WheatSeeds, MinecraftItemTypes.BeetrootSeeds]);
 
 const Prop = {
   chest: "mob:chest",
-  composter: "mob:composter",
+  station: "mob:station",
+  bed: "mob:bed",
   bag: "mob:bag",
   goal: "mob:goal",
 } as const;
 
-type Goal = "crops" | "chest" | "none";
+/** Entity property (entities/farmer.json) that drives the sleeping pose in the resource pack. */
+const SLEEPING_PROPERTY = "mob:sleeping";
+
+type Goal = "crops" | "chest" | "bed" | "none";
 const GOAL_EVENTS: Record<Goal, string> = {
   crops: "mob:go_to_crops",
   chest: "mob:go_to_chest",
+  bed: "mob:go_to_bed",
   none: "mob:stop_moving",
 };
 
@@ -82,9 +85,19 @@ const isMature = (block: Block): boolean =>
 
 const bagSize = (bag: Bag): number => Object.values(bag).reduce((sum, n) => sum + n, 0);
 
+const isNight = (): boolean => {
+  const time = world.getTimeOfDay();
+  return time >= NIGHT_START && time < NIGHT_END;
+};
+
 /** A farmer's persistent state, stored as dynamic properties on the entity itself. */
 class FarmerState {
   constructor(private readonly entity: Entity) {}
+
+  private json<T>(key: string): T | undefined {
+    const raw = this.entity.getDynamicProperty(key) as string | undefined;
+    return raw ? (JSON.parse(raw) as T) : undefined;
+  }
 
   get chest(): Vector3 | undefined {
     return this.entity.getDynamicProperty(Prop.chest) as Vector3 | undefined;
@@ -93,16 +106,22 @@ class FarmerState {
     this.entity.setDynamicProperty(Prop.chest, value);
   }
 
-  get composter(): Vector3 | undefined {
-    return this.entity.getDynamicProperty(Prop.composter) as Vector3 | undefined;
+  get station(): CompostStation | undefined {
+    return this.json<CompostStation>(Prop.station);
   }
-  set composter(value: Vector3 | undefined) {
-    this.entity.setDynamicProperty(Prop.composter, value);
+  set station(value: CompostStation | undefined) {
+    this.entity.setDynamicProperty(Prop.station, value && JSON.stringify(value));
+  }
+
+  get bed(): Vector3 | undefined {
+    return this.entity.getDynamicProperty(Prop.bed) as Vector3 | undefined;
+  }
+  set bed(value: Vector3 | undefined) {
+    this.entity.setDynamicProperty(Prop.bed, value);
   }
 
   get bag(): Bag {
-    const raw = this.entity.getDynamicProperty(Prop.bag) as string | undefined;
-    return raw ? (JSON.parse(raw) as Bag) : {};
+    return this.json<Bag>(Prop.bag) ?? {};
   }
   set bag(value: Bag) {
     this.entity.setDynamicProperty(Prop.bag, bagSize(value) > 0 ? JSON.stringify(value) : undefined);
@@ -113,6 +132,16 @@ class FarmerState {
     this.entity.setDynamicProperty(Prop.goal, value);
     // Switches the data-driven move_to_block goal defined in entities/farmer.json.
     this.entity.triggerEvent(GOAL_EVENTS[value]);
+  }
+
+  get sleeping(): boolean {
+    return this.entity.getProperty(SLEEPING_PROPERTY) === true;
+  }
+  set sleeping(value: boolean) {
+    if (value === this.sleeping) return;
+    this.entity.setProperty(SLEEPING_PROPERTY, value);
+    // Freezes / unfreezes the farmer (component group "mob:asleep").
+    this.entity.triggerEvent(value ? "mob:fall_asleep" : "mob:wake_up");
   }
 }
 
@@ -131,13 +160,20 @@ export class Farmer {
     return this.state.bag;
   }
 
-  /** Called periodically: performs at most one action (harvest one crop or unload the bag). */
+  /** Called periodically: performs at most one action (sleep, harvest one crop or unload the bag). */
   tick(): void {
     const chestLocation = this.state.chest ?? this.linkChest();
     if (!chestLocation) {
       this.status("needs space for a chest");
       return;
     }
+
+    if (isNight()) {
+      this.night(chestLocation);
+      return;
+    }
+    if (this.state.sleeping) this.wakeUp();
+
     const chestBlock = safeGetBlock(this.dimension, chestLocation);
     if (!chestBlock) return; // chunk not loaded
     const chest = chestBlock.getComponent(BlockComponentTypes.Inventory)?.container;
@@ -146,8 +182,6 @@ export class Farmer {
       this.status("lost its chest!");
       return;
     }
-    const composter = this.linkComposter(chestLocation);
-    if (composter) this.ripenComposter(composter);
 
     const bag = this.state.bag;
     if (bagSize(bag) < BAG_CAPACITY) {
@@ -164,7 +198,7 @@ export class Farmer {
     }
 
     if (bagSize(bag) > 0) {
-      this.unload(chestLocation, chest, composter, bag);
+      this.unload(chestLocation, chest, bag);
       return;
     }
 
@@ -184,17 +218,64 @@ export class Farmer {
     return chest;
   }
 
-  /** Returns the composter next to the chest, finding or placing one if needed. */
-  private linkComposter(chest: Vector3): Block | undefined {
-    const known = this.state.composter;
-    const current = known && safeGetBlock(this.dimension, known);
-    if (current?.typeId === MinecraftBlockTypes.Composter) return current;
+  /** Returns the compost station next to the chest, building it (again) if a part is missing. */
+  private linkStation(chest: Vector3): CompostStation | undefined {
+    const known = this.state.station;
+    if (known && isIntact(this.dimension, known)) return known;
+    const built = buildStation(this.dimension, chest);
+    this.state.station = built;
+    return built;
+  }
 
-    const location =
-      findBlockNear(this.dimension, chest, SEARCH_RADIUS, MinecraftBlockTypes.Composter) ??
-      placeBlockNextTo(this.dimension, chest, BlockPermutation.resolve(MinecraftBlockTypes.Composter));
-    this.state.composter = location;
+  /** Returns the farmer's bed (head piece), finding or placing one near the chest. */
+  private linkBed(chest: Vector3): Block | undefined {
+    const known = this.state.bed;
+    const current = known && safeGetBlock(this.dimension, known);
+    if (current && isBedHead(current)) return current;
+    const location = findBedHead(this.dimension, chest, BED_RADIUS) ?? placeBed(this.dimension, chest);
+    this.state.bed = location;
     return location && safeGetBlock(this.dimension, location);
+  }
+
+  private night(chest: Vector3): void {
+    const bed = this.linkBed(chest);
+    if (!bed) {
+      if (this.state.sleeping) this.wakeUp();
+      this.state.goal = "none";
+      this.status("no room for a bed");
+      return;
+    }
+    if (this.state.sleeping) {
+      this.status("Zzz...");
+      return;
+    }
+    if (Vector3Utils.distance(this.entity.location, center(bed.location)) > BED_REACH) {
+      this.state.goal = "bed";
+      this.status("going to bed");
+      return;
+    }
+    this.fallAsleep(bed);
+  }
+
+  private fallAsleep(head: Block): void {
+    const foot = bedFoot(head);
+    this.state.goal = "none";
+    this.state.sleeping = true;
+    // Lie on the head piece, looking towards the foot of the bed.
+    this.entity.teleport(
+      { x: head.location.x + 0.5, y: head.location.y + BED_HEIGHT, z: head.location.z + 0.5 },
+      { facingLocation: Vector3Utils.add(center(foot), { x: 0, y: BED_HEIGHT - 0.5, z: 0 }) }
+    );
+    this.status("Zzz...");
+  }
+
+  private wakeUp(): void {
+    this.state.sleeping = false;
+    // Step out of bed onto the floor next to it.
+    const bed = this.state.bed;
+    const spot = bed && spotNextToBed(this.dimension, bed);
+    if (spot) this.entity.teleport({ x: spot.x + 0.5, y: spot.y, z: spot.z + 0.5 });
+    this.status("good morning!");
   }
 
   private findMatureCrop(origin: Vector3, radius: number): Block | undefined {
@@ -234,58 +315,44 @@ export class Farmer {
     this.status(`harvesting (${bagSize(bag)}/${BAG_CAPACITY})`);
   }
 
-  /** Vegetables go into the chest; leftovers and whatever does not fit go into the composter. */
-  private unload(chestLocation: Vector3, chest: Container, composter: Block | undefined, bag: Bag): void {
+  /**
+   * Vegetables go into the collector chest. Leftovers - and vegetables that don't fit - go into the
+   * compost chest, from where the hopper feeds the composter. Whatever still doesn't fit is dropped.
+   */
+  private unload(chestLocation: Vector3, chest: Container, bag: Bag): void {
     if (Vector3Utils.distance(this.entity.location, center(chestLocation)) > CHEST_REACH) {
       this.state.goal = "chest";
       this.status(`bringing ${bagSize(bag)} items to the chest`);
       return;
     }
 
-    if (composter) this.emptyComposter(composter, chest);
+    const station = this.linkStation(chestLocation);
+    const compostChest = station && stationChest(this.dimension, station);
+    if (station) this.emptyComposter(station, chest);
 
     for (const [id, count] of Object.entries(bag)) {
-      const leftover = PRODUCE.has(id) ? (chest.addItem(new ItemStack(id, count))?.amount ?? 0) : count;
-      if (leftover > 0) this.compost(id, leftover, composter ?? safeGetBlock(this.dimension, chestLocation)!);
+      let rest: ItemStack | undefined = new ItemStack(id, count);
+      if (PRODUCE.has(id) || !COMPOSTABLE.has(id)) rest = chest.addItem(rest);
+      if (rest && compostChest && COMPOSTABLE.has(id)) rest = compostChest.addItem(rest);
+      if (rest) dropOn(this.dimension, station?.chest ?? chestLocation, rest);
     }
 
     this.state.bag = {};
     this.state.goal = "none";
     face(this.entity, chestLocation);
     this.dimension.playSound("random.chestclosed", chestLocation);
-    this.status(chest.emptySlotsCount === 0 ? "chest is full!" : "unloaded the harvest");
-  }
-
-  /** Puts items into the composter one by one; anything it can't take is dropped next to it. */
-  private compost(id: string, count: number, target: Block): void {
-    const chance = COMPOST_CHANCE.get(id);
-    let remaining = count;
-    if (target.typeId === MinecraftBlockTypes.Composter && chance !== undefined) {
-      let level = (target.permutation.getState("composter_fill_level") as number | undefined) ?? 0;
-      while (remaining > 0 && level < COMPOSTER_FULL) {
-        remaining--;
-        if (Math.random() < chance) level++;
-      }
-      target.setPermutation(target.permutation.withState("composter_fill_level", level));
-      this.dimension.spawnParticle("minecraft:crop_growth_emitter", center(target.location));
-    }
-    if (remaining > 0) dropOn(this.dimension, target.location, id, remaining);
-  }
-
-  /** Vanilla turns a full composter into a ready one shortly after; setting the state ourselves skips that delay. */
-  private ripenComposter(composter: Block): void {
-    if (composter.permutation.getState("composter_fill_level") === COMPOSTER_FULL) {
-      composter.setPermutation(composter.permutation.withState("composter_fill_level", COMPOSTER_READY));
-    }
+    if (!station) this.status("no room for a compost station");
+    else this.status(chest.emptySlotsCount === 0 ? "chest is full!" : "unloaded the harvest");
   }
 
   /** Takes the bone meal out of a ready composter and stores it in the chest (or drops it if the chest is full). */
-  private emptyComposter(composter: Block, chest: Container): void {
-    if (composter.permutation.getState("composter_fill_level") !== COMPOSTER_READY) return;
+  private emptyComposter(station: CompostStation, chest: Container): void {
+    const composter = safeGetBlock(this.dimension, station.composter);
+    if (composter?.permutation.getState("composter_fill_level") !== COMPOSTER_READY) return;
     composter.setPermutation(composter.permutation.withState("composter_fill_level", 0));
     const leftover = chest.addItem(new ItemStack(MinecraftItemTypes.BoneMeal));
-    if (leftover) dropOn(this.dimension, composter.location, leftover);
-    this.dimension.playSound("block.composter.empty", composter.location);
+    if (leftover) dropOn(this.dimension, station.composter, leftover);
+    this.dimension.playSound("block.composter.empty", station.composter);
   }
 
   private status(text: string): void {

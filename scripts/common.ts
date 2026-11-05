@@ -60,19 +60,21 @@ export function findBlockNear(
   return undefined;
 }
 
+/** The four horizontal neighbours. */
+export const SIDES: readonly Vector3[] = [
+  { x: -1, y: 0, z: 0 },
+  { x: 0, y: 0, z: -1 },
+  { x: 0, y: 0, z: 1 },
+  { x: 1, y: 0, z: 0 },
+];
+
 /** Places a block on the first free side next to `origin` and returns where it went. */
 export function placeBlockNextTo(
   dimension: Dimension,
   origin: Vector3,
   permutation: BlockPermutation
 ): Vector3 | undefined {
-  const sides: Vector3[] = [
-    { x: -1, y: 0, z: 0 },
-    { x: 0, y: 0, z: -1 },
-    { x: 0, y: 0, z: 1 },
-    { x: 1, y: 0, z: 0 },
-  ];
-  for (const side of sides) {
+  for (const side of SIDES) {
     const location = Vector3Utils.add(Vector3Utils.floor(origin), side);
     const block = safeGetBlock(dimension, location);
     if (block && isReplaceable(block)) {
