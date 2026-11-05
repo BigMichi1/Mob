@@ -1,0 +1,61 @@
+{
+  "format_version": "1.26.0",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "mob:builder",
+      "is_summonable": true,
+      "is_spawnable": true
+    },
+    "component_groups": {
+      "mob:fetching": {
+        "minecraft:behavior.move_to_block": {
+          "priority": 3,
+          "tick_interval": 10,
+          "search_range": 10,
+          "search_height": 4,
+          "goal_radius": 1.5,
+          "speed_multiplier": 1.0,
+          "target_selection_method": "nearest",
+          "target_blocks": ["minecraft:barrel"]
+        }
+      }
+    },
+    "components": {
+      "minecraft:type_family": { "family": ["builder", "mob"] },
+      "minecraft:collision_box": { "width": 0.6, "height": 1.9 },
+      "minecraft:health": { "value": 20, "max": 20 },
+      "minecraft:persistent": {},
+      "minecraft:physics": {},
+      "minecraft:pushable": { "is_pushable": true, "is_pushable_by_piston": true },
+      "minecraft:nameable": { "always_show": true, "allow_name_tag_renaming": false },
+      "minecraft:movement": { "value": 0.5 },
+      "minecraft:movement.basic": {},
+      "minecraft:jump.static": {},
+      "minecraft:can_climb": {},
+      "minecraft:navigation.walk": {
+        "can_path_over_water": true,
+        "can_pass_doors": true,
+        "can_open_doors": true,
+        "avoid_water": true
+      },
+      "minecraft:home": {
+        "restriction_radius": 8,
+        "restriction_type": "random_movement"
+      },
+      "minecraft:behavior.float": { "priority": 0 },
+      "minecraft:behavior.panic": { "priority": 1, "speed_multiplier": 0.6 },
+      "minecraft:behavior.move_towards_home_restriction": { "priority": 4, "speed_multiplier": 0.6 },
+      "minecraft:behavior.random_stroll": { "priority": 6, "speed_multiplier": 0.6 },
+      "minecraft:behavior.look_at_player": { "priority": 7, "look_distance": 8, "probability": 0.05 },
+      "minecraft:behavior.random_look_around": { "priority": 8 }
+    },
+    "events": {
+      "mob:start_fetching": {
+        "add": { "component_groups": ["mob:fetching"] }
+      },
+      "mob:stop_fetching": {
+        "remove": { "component_groups": ["mob:fetching"] }
+      }
+    }
+  }
+}

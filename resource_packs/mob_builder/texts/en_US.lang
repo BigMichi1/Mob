@@ -1,0 +1,4 @@
+pack.name=Mob Builder (RP)
+pack.description=Visuals for the Mob Builder add-on.
+entity.mob:builder.name=Builder
+item.spawn_egg.entity.mob:builder.name=Spawn Builder

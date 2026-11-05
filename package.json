@@ -1,0 +1,29 @@
+{
+  "name": "mob-builder",
+  "version": "1.0.0",
+  "description": "Minecraft Bedrock add-on: a villager-like builder that constructs a house from blocks delivered to an input barrel (stable Script API only).",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "lint": "just-scripts lint",
+    "build": "just-scripts build",
+    "build:production": "just-scripts build --production",
+    "clean": "just-scripts clean",
+    "local-deploy": "just-scripts local-deploy",
+    "mcaddon": "just-scripts mcaddon",
+    "mcaddon:production": "just-scripts mcaddon --production"
+  },
+  "dependencies": {
+    "@minecraft/math": "^2.4.1",
+    "@minecraft/server": "2.11.0",
+    "@minecraft/vanilla-data": "^1.26.60"
+  },
+  "devDependencies": {
+    "@minecraft/core-build-tasks": "^5.7.1",
+    "eslint-plugin-minecraft-linting": "^2.0.10",
+    "source-map": "^0.7.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.72.1"
+  }
+}
