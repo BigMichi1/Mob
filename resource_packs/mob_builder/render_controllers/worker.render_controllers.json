@@ -1,0 +1,15 @@
+{
+  "format_version": "1.8.0",
+  "render_controllers": {
+    "controller.render.mob.worker_base": {
+      "geometry": "Geometry.default",
+      "materials": [{ "*": "Material.default" }],
+      "textures": ["Texture.base"]
+    },
+    "controller.render.mob.worker_profession": {
+      "geometry": "Geometry.default",
+      "materials": [{ "*": "Material.masked" }],
+      "textures": ["Texture.biome", "Texture.profession"]
+    }
+  }
+}

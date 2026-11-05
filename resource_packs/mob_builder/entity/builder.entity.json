@@ -4,10 +4,13 @@
     "description": {
       "identifier": "mob:builder",
       "materials": {
-        "default": "wandering_trader"
+        "default": "villager_v2",
+        "masked": "villager_v2_masked"
       },
       "textures": {
-        "default": "textures/entity/wandering_trader"
+        "base": "textures/entity/villager2/villager",
+        "biome": "textures/entity/villager2/biomes/biome_plains",
+        "profession": "textures/entity/villager2/professions/stonemason"
       },
       "geometry": {
         "default": "geometry.villager_v2"
@@ -22,11 +25,20 @@
         "move": "animation.villager.move"
       },
       "animation_controllers": [
-        { "general": "controller.animation.villager.general" },
-        { "raise_arms": "controller.animation.villager_v2.raise_arms" },
-        { "move": "controller.animation.villager.move" }
+        {
+          "general": "controller.animation.villager.general"
+        },
+        {
+          "raise_arms": "controller.animation.villager_v2.raise_arms"
+        },
+        {
+          "move": "controller.animation.villager.move"
+        }
       ],
-      "render_controllers": ["controller.render.wandering_trader"],
+      "render_controllers": [
+        "controller.render.mob.worker_base",
+        "controller.render.mob.worker_profession"
+      ],
       "spawn_egg": {
         "base_color": "#8B5A2B",
         "overlay_color": "#F2C14E"

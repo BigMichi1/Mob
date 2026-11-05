@@ -1,15 +1,20 @@
-import { Player, system, world } from "@minecraft/server";
+import { type Entity, Player, system, world } from "@minecraft/server";
 import { Vector3Utils } from "@minecraft/math";
 import { MinecraftBlockTypes, MinecraftDimensionTypes } from "@minecraft/vanilla-data";
-import { Builder, BUILDER_TYPE, prettyName } from "./builder";
+import { Builder, BUILDER_TYPE } from "./builder";
+import { describeBag, Farmer, FARMER_TYPE } from "./farmer";
+import { prettyName } from "./common";
 
-/** Ticks between two builder actions (20 ticks = 1 second). */
+/** Ticks between two worker actions (20 ticks = 1 second). */
 const ACTION_INTERVAL_TICKS = 20;
 
 const DIMENSIONS = [MinecraftDimensionTypes.Overworld, MinecraftDimensionTypes.Nether, MinecraftDimensionTypes.TheEnd];
 
-const allBuilders = (): Builder[] =>
-  DIMENSIONS.flatMap((id) => world.getDimension(id).getEntities({ type: BUILDER_TYPE })).map((e) => new Builder(e));
+const entitiesOfType = (type: string): Entity[] =>
+  DIMENSIONS.flatMap((id) => world.getDimension(id).getEntities({ type }));
+
+const allBuilders = (): Builder[] => entitiesOfType(BUILDER_TYPE).map((e) => new Builder(e));
+const allFarmers = (): Farmer[] => entitiesOfType(FARMER_TYPE).map((e) => new Farmer(e));
 
 function showShoppingList(player: Player, builder: Builder): void {
   const { done, total } = builder.progress;
@@ -21,20 +26,26 @@ function showShoppingList(player: Player, builder: Builder): void {
   );
 }
 
-// Main loop: every builder performs at most one action per interval.
+function showFarmerBag(player: Player, farmer: Farmer): void {
+  const bag = describeBag(farmer.bag);
+  player.sendMessage(`§a[Farmer]§r ${bag ? `Carrying: ${bag}` : "Carrying nothing right now."}`);
+}
+
+// Main loop: every worker performs at most one action per interval.
 system.runInterval(() => {
-  for (const builder of allBuilders()) {
+  for (const worker of [...allBuilders(), ...allFarmers()]) {
     try {
-      builder.tick();
+      worker.tick();
     } catch (error) {
-      console.warn(`[Builder] tick failed: ${error}`);
+      console.warn(`[Workers] tick failed: ${error}`);
     }
   }
 }, ACTION_INTERVAL_TICKS);
 
-// Right-click a builder to see what it still needs. Before-events run in read-only mode, so defer the message.
+// Right-click a worker to see its status. Before-events run in read-only mode, so defer the message.
 world.beforeEvents.playerInteractWithEntity.subscribe(({ player, target }) => {
   if (target.typeId === BUILDER_TYPE) system.run(() => showShoppingList(player, new Builder(target)));
+  if (target.typeId === FARMER_TYPE) system.run(() => showFarmerBag(player, new Farmer(target)));
 });
 
 // Opening a builder's input barrel also shows the shopping list.

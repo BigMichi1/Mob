@@ -1,5 +1,4 @@
 import {
-  type Block,
   BlockComponentTypes,
   BlockPermutation,
   type Container,
@@ -11,6 +10,17 @@ import {
 import { Vector3Utils } from "@minecraft/math";
 import { MinecraftBlockTypes, MinecraftEntityTypes } from "@minecraft/vanilla-data";
 import { BLUEPRINT, type BlueprintStep, HOUSE_OFFSET_FROM_BARREL } from "./blueprint";
+import {
+  center,
+  dropOn,
+  face,
+  findBlockNear,
+  isReplaceable,
+  placeBlockNextTo,
+  prettyName,
+  safeGetBlock,
+  setStatus,
+} from "./common";
 
 export const BUILDER_TYPE = "mob:builder";
 
@@ -29,40 +39,10 @@ const Prop = {
   finished: "mob:finished",
 } as const;
 
-/** Blocks that may be overwritten by the house (everything else is treated as an obstacle and skipped). */
-const REPLACEABLE = new Set<string>([
-  MinecraftBlockTypes.ShortGrass,
-  MinecraftBlockTypes.TallGrass,
-  MinecraftBlockTypes.Fern,
-  MinecraftBlockTypes.LargeFern,
-  MinecraftBlockTypes.Deadbush,
-  MinecraftBlockTypes.SnowLayer,
-]);
-
 const WOODEN_BLOCKS = new Set<string>([MinecraftBlockTypes.OakPlanks, MinecraftBlockTypes.OakLog]);
 
 /** Entities that do not prevent a block from being placed. */
 const NON_BLOCKING_ENTITIES = ["minecraft:item", MinecraftEntityTypes.XpOrb];
-
-/** "minecraft:oak_planks" -> "Oak Planks" */
-export const prettyName = (id: string): string =>
-  id
-    .replace(/^.*:/, "")
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-
-const center = (v: Vector3): Vector3 => Vector3Utils.add(v, { x: 0.5, y: 0.5, z: 0.5 });
-
-const safeGetBlock = (dimension: Dimension, location: Vector3): Block | undefined => {
-  try {
-    return dimension.getBlock(location);
-  } catch {
-    return undefined; // outside the world or chunk not loaded
-  }
-};
-
-const isReplaceable = (block: Block): boolean => block.isAir || block.isLiquid || REPLACEABLE.has(block.typeId);
 
 /** A builder's persistent state, stored as dynamic properties on the entity itself. */
 class BuilderState {
@@ -180,43 +160,19 @@ export class Builder {
 
   /** Finds a barrel next to the builder, or places a new one, and remembers it as the input barrel. */
   private linkBarrel(): Vector3 | undefined {
-    const origin = Vector3Utils.floor(this.entity.location);
-    const r = BARREL_SEARCH_RADIUS;
-    let found: Vector3 | undefined;
-    for (let x = -r; x <= r && !found; x++) {
-      for (let y = -1; y <= 2 && !found; y++) {
-        for (let z = -r; z <= r && !found; z++) {
-          const location = Vector3Utils.add(origin, { x, y, z });
-          if (safeGetBlock(this.dimension, location)?.typeId === MinecraftBlockTypes.Barrel) found = location;
-        }
-      }
-    }
-
-    found ??= this.placeBarrel(origin);
-    if (found) {
-      this.state.barrel = found;
+    const barrel =
+      findBlockNear(this.dimension, this.entity.location, BARREL_SEARCH_RADIUS, MinecraftBlockTypes.Barrel) ??
+      placeBlockNextTo(
+        this.dimension,
+        this.entity.location,
+        BlockPermutation.resolve(MinecraftBlockTypes.Barrel, { facing_direction: 1 })
+      );
+    if (barrel) {
+      this.state.barrel = barrel;
       this.state.step = 0;
       this.status("ready - fill the barrel!");
     }
-    return found;
-  }
-
-  private placeBarrel(origin: Vector3): Vector3 | undefined {
-    const candidates: Vector3[] = [
-      { x: -1, y: 0, z: 0 },
-      { x: 0, y: 0, z: -1 },
-      { x: 0, y: 0, z: 1 },
-      { x: 1, y: 0, z: 0 },
-    ];
-    for (const offset of candidates) {
-      const location = Vector3Utils.add(origin, offset);
-      const block = safeGetBlock(this.dimension, location);
-      if (block && isReplaceable(block)) {
-        block.setPermutation(BlockPermutation.resolve(MinecraftBlockTypes.Barrel, { facing_direction: 1 }));
-        return location;
-      }
-    }
-    return undefined;
+    return barrel;
   }
 
   /** Skips steps that are already built or blocked, and returns the next step that needs a block. */
@@ -280,7 +236,7 @@ export class Builder {
     this.dimension.setBlockType(location, step.block);
     this.dimension.spawnParticle("minecraft:villager_happy", center(location));
     this.dimension.playSound(WOODEN_BLOCKS.has(step.block) ? "dig.wood" : "dig.stone", location);
-    this.entity.teleport(this.entity.location, { facingLocation: center(location) });
+    face(this.entity, location);
     this.state.carrying = undefined;
     this.state.step = this.state.step + 1;
     this.status(`built ${this.progress.done}/${this.progress.total}`);
@@ -300,7 +256,7 @@ export class Builder {
 
   private returnItem(itemId: string, barrel: Vector3, container: Container): void {
     const leftover = container.addItem(new ItemStack(itemId));
-    if (leftover) this.dimension.spawnItem(leftover, Vector3Utils.add(barrel, { x: 0.5, y: 1.2, z: 0.5 }));
+    if (leftover) dropOn(this.dimension, barrel, leftover);
     this.state.carrying = undefined;
   }
 
@@ -315,7 +271,6 @@ export class Builder {
   }
 
   private status(text: string): void {
-    const tag = `Builder\n§7${text}`;
-    if (this.entity.nameTag !== tag) this.entity.nameTag = tag;
+    setStatus(this.entity, "Builder", text);
   }
 }

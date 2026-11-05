@@ -1,2 +1,2 @@
 pack.name=Mob Builder (BP)
-pack.description=A villager-like builder that constructs a house from blocks delivered to its input barrel.
+pack.description=Villager-like workers: a builder that constructs a house from an input barrel and a farmer that harvests crops into a collector chest.
