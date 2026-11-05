@@ -1,0 +1,27 @@
+{
+  "format_version": "1.21.80",
+  "minecraft:block": {
+    "description": {
+      "identifier": "mob:field_marker",
+      "menu_category": {
+        "category": "items"
+      }
+    },
+    "components": {
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:material_instances": {
+        "*": {
+          "texture": "mob_field_marker",
+          "render_method": "opaque"
+        }
+      },
+      "minecraft:destructible_by_mining": {
+        "seconds_to_destroy": 0.5
+      },
+      "minecraft:destructible_by_explosion": {
+        "explosion_resistance": 3
+      },
+      "minecraft:map_color": "#E8C12E"
+    }
+  }
+}

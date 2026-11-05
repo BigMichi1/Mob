@@ -18,7 +18,7 @@
         "minecraft:behavior.move_to_block": {
           "priority": 3,
           "tick_interval": 10,
-          "search_range": 10,
+          "search_range": 32,
           "search_height": 3,
           "goal_radius": 1.0,
           "stay_duration": 1.0,
@@ -36,7 +36,7 @@
         "minecraft:behavior.move_to_block": {
           "priority": 3,
           "tick_interval": 10,
-          "search_range": 10,
+          "search_range": 32,
           "search_height": 4,
           "goal_radius": 1.5,
           "speed_multiplier": 1.0,
@@ -50,7 +50,7 @@
         "minecraft:behavior.move_to_block": {
           "priority": 3,
           "tick_interval": 10,
-          "search_range": 12,
+          "search_range": 32,
           "search_height": 4,
           "goal_radius": 1.0,
           "speed_multiplier": 1.0,
@@ -71,6 +71,21 @@
         "minecraft:collision_box": {
           "width": 1.0,
           "height": 0.3
+        }
+      },
+      "mob:to_field": {
+        "minecraft:behavior.move_to_block": {
+          "priority": 3,
+          "tick_interval": 10,
+          "search_range": 32,
+          "search_height": 4,
+          "goal_radius": 1.5,
+          "stay_duration": 2.0,
+          "speed_multiplier": 1.0,
+          "target_selection_method": "random",
+          "target_blocks": [
+            "mob:field_marker"
+          ]
         }
       }
     },
@@ -111,19 +126,11 @@
         "can_open_doors": true,
         "avoid_water": true
       },
-      "minecraft:home": {
-        "restriction_radius": 10,
-        "restriction_type": "random_movement"
-      },
       "minecraft:behavior.float": {
         "priority": 0
       },
       "minecraft:behavior.panic": {
         "priority": 1,
-        "speed_multiplier": 0.6
-      },
-      "minecraft:behavior.move_towards_home_restriction": {
-        "priority": 4,
         "speed_multiplier": 0.6
       },
       "minecraft:behavior.random_stroll": {
@@ -144,7 +151,8 @@
         "remove": {
           "component_groups": [
             "mob:to_chest",
-            "mob:to_bed"
+            "mob:to_bed",
+            "mob:to_field"
           ]
         },
         "add": {
@@ -157,7 +165,8 @@
         "remove": {
           "component_groups": [
             "mob:to_crops",
-            "mob:to_bed"
+            "mob:to_bed",
+            "mob:to_field"
           ]
         },
         "add": {
@@ -171,7 +180,8 @@
           "component_groups": [
             "mob:to_crops",
             "mob:to_chest",
-            "mob:to_bed"
+            "mob:to_bed",
+            "mob:to_field"
           ]
         }
       },
@@ -179,7 +189,8 @@
         "remove": {
           "component_groups": [
             "mob:to_crops",
-            "mob:to_chest"
+            "mob:to_chest",
+            "mob:to_field"
           ]
         },
         "add": {
@@ -193,7 +204,8 @@
           "component_groups": [
             "mob:to_crops",
             "mob:to_chest",
-            "mob:to_bed"
+            "mob:to_bed",
+            "mob:to_field"
           ]
         },
         "add": {
@@ -206,6 +218,20 @@
         "remove": {
           "component_groups": [
             "mob:asleep"
+          ]
+        }
+      },
+      "mob:go_to_field": {
+        "remove": {
+          "component_groups": [
+            "mob:to_crops",
+            "mob:to_chest",
+            "mob:to_bed"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "mob:to_field"
           ]
         }
       }

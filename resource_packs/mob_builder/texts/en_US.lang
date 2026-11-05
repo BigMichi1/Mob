@@ -4,3 +4,4 @@ entity.mob:builder.name=Builder
 item.spawn_egg.entity.mob:builder.name=Spawn Builder
 entity.mob:farmer.name=Farmer
 item.spawn_egg.entity.mob:farmer.name=Spawn Farmer
+tile.mob:field_marker.name=Field Marker
